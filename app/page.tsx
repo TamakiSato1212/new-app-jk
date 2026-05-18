@@ -463,11 +463,11 @@ useEffect(() => {
     setActiveId(id); setActiveOp(op); setStartPointerPos({ x: e.clientX, y: e.clientY });
     const item = currentItems.find(i => i.id === id)!;
     
-    if (op === "move") { 
-      setDragOffset({ x: e.clientX - item.x, y: e.clientY - item.y });
-      const inits: Record<string, {x: number, y: number}> = {};
-      currentItems.forEach(i => { inits[i.id] = {x: i.x, y: i.y}; });
-      setInitialPositions(inits);
+   if (op === "move") { 
+        setDragOffset({ x: e.clientX - (item as any).x, y: e.clientY - (item as any).y });
+        const inits: Record<string, {x: number, y: number}> = {};
+        currentItems.forEach(i => { inits[i.id] = {x: (i as any).x, y: (i as any).y}; });
+        setInitialPositions(inits);
     }
     if (op === "resize" && item.type !== "drawing") setInitialVal(item.type === "sticker" ? item.width : item.fontSize);
     if (op === "rotate" && item.type !== "drawing") setInitialVal(item.rotation || 0);
