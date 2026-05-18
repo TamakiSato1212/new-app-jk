@@ -486,7 +486,7 @@ useEffect(() => {
     updateCurrentItems(currentItems.map(item => {
       if (activeOp === "move" && selectedIds.includes(item.id) && selectedIds.includes(activeId)) {
         if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return item;
-        const initial = initialPositions[item.id] || { x: item.x, y: item.y };
+        const initial = initialPositions[item.id] || { x: (item as any).x, y: (item as any).y };
         return { ...item, x: snap(initial.x + dx), y: snap(initial.y + dy) };
       }
       
@@ -644,7 +644,7 @@ useEffect(() => {
                   <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); moveDown(item.id); }} className="w-9 h-9 flex items-center justify-center bg-white border border-gray-200 shadow-sm hover:bg-blue-50 hover:border-blue-300 rounded-lg text-lg transition" title="1つ奥(下)へ">⬇️</button>
                 </div>
                 <div className="flex gap-1">
-                  <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const target = items.find(i => i.id === item.id); if(target) { const newItem = { ...target, id: "s-" + Date.now(), x: target.x + 20, y: target.y + 20 }; updateCurrentItems([...items, newItem]); setSelectedIds([newItem.id]); } }} className="w-9 h-9 flex items-center justify-center bg-white border border-gray-200 shadow-sm hover:bg-green-50 hover:border-green-300 rounded-lg text-lg transition" title="複製">👯</button>
+                  <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const target = items.find(i => i.id === item.id); if(target) { const newItem = { ...target, id: "s-" + Date.now(), x: (target as any).x + 20, y: (target as any).y + 20 }; updateCurrentItems([...items, newItem]); setSelectedIds([newItem.id]); } }} className="w-9 h-9 flex items-center justify-center bg-white border border-gray-200 shadow-sm hover:bg-green-50 hover:border-green-300 rounded-lg text-lg transition" title="複製">👯</button>
                   <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateCurrentItems(items.filter(i => i.id !== item.id)); setSelectedIds([]); }} className="w-9 h-9 flex items-center justify-center bg-white border border-red-200 shadow-sm hover:bg-red-50 text-red-500 rounded-lg text-lg transition" title="削除">🗑️</button>
                 </div>
               </div>
@@ -652,7 +652,7 @@ useEffect(() => {
               {/* シールの名前と秘密設定 */}
               <div className="flex gap-2 items-center">
                 <input type="text" value={item.name || ""} onChange={(e) => updateCurrentItems(items.map(i => i.id === item.id ? { ...i, name: e.target.value } as CanvasItem : i))} placeholder="シールの名前" className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 outline-none text-xs text-gray-700 focus:border-pink-400 font-bold" />
-                <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateCurrentItems(items.map(i => i.id === item.id ? { ...i, isSecret: !i.isSecret } as CanvasItem : i)); }} className={`w-9 h-9 flex items-center justify-center rounded-lg text-lg transition border ${item.isSecret ? "bg-purple-100 border-purple-300" : "bg-gray-50 border-gray-200 hover:bg-gray-100"}`} title="スクラッチ（秘密にする）">{item.isSecret ? '🔒' : '🔓'}</button>
+                <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateCurrentItems(items.map(i => i.id === item.id ? { ...i, isSecret: !(i as any).isSecret } as CanvasItem : i)); }} className={`w-9 h-9 flex items-center justify-center rounded-lg text-lg transition border ${item.isSecret ? "bg-purple-100 border-purple-300" : "bg-gray-50 border-gray-200 hover:bg-gray-100"}`} title="スクラッチ（秘密にする）">{item.isSecret ? '🔒' : '🔓'}</button>
               </div>
 
               {/* デコレーション */}
@@ -681,8 +681,8 @@ useEffect(() => {
                   <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); moveDown(item.id); }} className="w-9 h-9 flex items-center justify-center bg-white border border-gray-200 shadow-sm hover:bg-blue-50 hover:border-blue-300 rounded-lg text-lg transition" title="1つ奥(下)へ">⬇️</button>
                 </div>
                 <div className="flex gap-1">
-                  <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateCurrentItems(items.map(i => i.id === item.id ? { ...i, isSecret: !i.isSecret } as CanvasItem : i)); }} className={`w-9 h-9 flex items-center justify-center bg-white border shadow-sm rounded-lg text-lg transition ${item.isSecret ? "border-purple-300 bg-purple-50 text-purple-600" : "border-gray-200"}`} title="スクラッチ（秘密にする）">{item.isSecret ? '🔒' : '🔓'}</button>
-                  <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const target = items.find(i => i.id === item.id); if(target) { const newItem = { ...target, id: "t-" + Date.now(), x: target.x + 20, y: target.y + 20 }; updateCurrentItems([...items, newItem]); setSelectedIds([newItem.id]); } }} className="w-9 h-9 flex items-center justify-center bg-white border border-gray-200 shadow-sm hover:bg-green-50 hover:border-green-300 rounded-lg text-lg transition" title="複製">👯</button>
+                  <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateCurrentItems(items.map(i => i.id === item.id ? { ...i, isSecret: !(i as any).isSecret } as CanvasItem : i)); }} className={`w-9 h-9 flex items-center justify-center bg-white border shadow-sm rounded-lg text-lg transition ${item.isSecret ? "border-purple-300 bg-purple-50 text-purple-600" : "border-gray-200"}`} title="スクラッチ（秘密にする）">{item.isSecret ? '🔒' : '🔓'}</button>
+                  <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); const target = items.find(i => i.id === item.id); if(target) { const newItem = { ...target, id: "t-" + Date.now(), x: (target as any).x + 20, y: (target as any).y + 20 }; updateCurrentItems([...items, newItem]); setSelectedIds([newItem.id]); } }} className="w-9 h-9 flex items-center justify-center bg-white border border-gray-200 shadow-sm hover:bg-green-50 hover:border-green-300 rounded-lg text-lg transition" title="複製">👯</button>
                   <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateCurrentItems(items.filter(i => i.id !== item.id)); setSelectedIds([]); }} className="w-9 h-9 flex items-center justify-center bg-white border border-red-200 shadow-sm hover:bg-red-50 text-red-500 rounded-lg text-lg transition" title="削除">🗑️</button>
                 </div>
               </div>
