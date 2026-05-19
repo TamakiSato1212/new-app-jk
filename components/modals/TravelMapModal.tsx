@@ -1,20 +1,24 @@
 "use client";
-import React, { useMemo } from "react";
+import React from "react";
 import dynamic from "next/dynamic";
 import { PageData } from "@/types";
+
+// 🚀 修正ポイント：dynamicインポートをコンポーネントの「外」に出しました！
+// これがNext.jsの絶対ルールです。これでVercelがパニックを起こさなくなります。
+const MapContent = dynamic(() => import("./MapContent"), { 
+  ssr: false, 
+  loading: () => <div className="flex-1 flex items-center justify-center text-blue-400 font-bold animate-pulse">地図を準備中...🗺️</div> 
+});
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
   pages: PageData[];
-  onJump: (page: PageData) => void; // ★ 親からジャンプ機能をもらう
+  onJump: (page: PageData) => void;
 };
 
 export const TravelMapModal = ({ isOpen, onClose, pages, onJump }: Props) => {
-  const MapContent = useMemo(() => dynamic(() => import("./MapContent"), { 
-    ssr: false, 
-    loading: () => <div className="flex-1 flex items-center justify-center text-blue-400 font-bold animate-pulse">地図を準備中...🗺️</div> 
-  }), []);
+  // ※ useMemoのブロックは削除しました
 
   if (!isOpen) return null;
 
@@ -26,7 +30,6 @@ export const TravelMapModal = ({ isOpen, onClose, pages, onJump }: Props) => {
           <button onClick={onClose} className="w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500 transition">✕</button>
         </div>
         <div className="flex-1 p-2 bg-blue-50 relative z-0">
-           {/* ★ ジャンプする前に地図を閉じる */}
            <MapContent pages={pages} onJump={(page) => { onClose(); onJump(page); }} />
         </div>
       </div>
