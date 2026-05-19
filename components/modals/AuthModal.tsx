@@ -44,12 +44,14 @@ export const AuthModal = ({ isOpen, onClose, onSuccess }: Props) => {
   };
 
   return (
+    
     <div 
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4" 
       onClick={onClose}
     >
+      
       <div 
-        className="w-full max-w-[360px] bg-white rounded-3xl p-6 shadow-2xl flex flex-col gap-4 animate-fade-in-up" 
+        className="w-full max-w-[360px] bg-white rounded-3xl p-6 shadow-2xl flex flex-col gap-4 mx-auto" 
         onClick={e => e.stopPropagation()}
       >
         <div className="flex justify-between items-center border-b border-gray-100 pb-3">
