@@ -44,12 +44,10 @@ export const AuthModal = ({ isOpen, onClose, onSuccess }: Props) => {
   };
 
   return (
-    /* 🚀 外枠：画面全体を覆い、Flexboxで中身を【絶対に上下左右のど真ん中】に固定する */
     <div 
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4" 
       onClick={onClose}
     >
-      /* 🚀 内枠：スマホでもはみ出さない最大幅（360px）を指定 */
       <div 
         className="w-full max-w-[360px] bg-white rounded-3xl p-6 shadow-2xl flex flex-col gap-4 animate-fade-in-up" 
         onClick={e => e.stopPropagation()}
