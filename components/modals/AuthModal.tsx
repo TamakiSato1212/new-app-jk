@@ -10,7 +10,7 @@ type Props = {
 };
 
 export const AuthModal = ({ isOpen, onClose, onSuccess }: Props) => {
-  const [isSignUp, setIsSignUp] = useState(false); // 新規登録かログインかの切り替え
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -25,14 +25,12 @@ export const AuthModal = ({ isOpen, onClose, onSuccess }: Props) => {
 
     try {
       if (isSignUp) {
-        // ★ Supabaseで新規アカウント作成
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
         alert("アカウントを作成しました！確認メールをチェックするか、そのままログインしてください。");
         if (data.user) onSuccess(data.user);
         onClose();
       } else {
-        // ★ Supabaseでログイン
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         if (data.user) onSuccess(data.user);
@@ -46,16 +44,17 @@ export const AuthModal = ({ isOpen, onClose, onSuccess }: Props) => {
   };
 
   return (
-    // 🚀 外枠：どんな画面サイズでも確実に中央に寄せる（Flexboxを使用）
-    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 p-4 font-sans" onClick={onClose}>
-      
-      {/* 🚀 内枠：最大幅をスマホサイズに制限し、はみ出しを防止 */}
+    /* 🚀 外枠：画面全体を覆い、Flexboxで中身を【絶対に上下左右のど真ん中】に固定する */
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4" 
+      onClick={onClose}
+    >
+      /* 🚀 内枠：スマホでもはみ出さない最大幅（360px）を指定 */
       <div 
-        className="w-full max-w-[340px] sm:max-w-md bg-white rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-fade-in-up overflow-hidden" 
+        className="w-full max-w-[360px] bg-white rounded-3xl p-6 shadow-2xl flex flex-col gap-4 animate-fade-in-up" 
         onClick={e => e.stopPropagation()}
       >
         <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-          {/* タイトルも少しコンパクトに調整 */}
           <h2 className="text-lg font-black text-gray-800 tracking-wider">
             {isSignUp ? "🔐 新規登録" : "🔑 ログイン"}
           </h2>
@@ -85,7 +84,6 @@ export const AuthModal = ({ isOpen, onClose, onSuccess }: Props) => {
         </form>
 
         <div className="text-center mt-2 border-t border-gray-100 pt-4">
-          {/* 🚀 最重要ポイント：長い文字を折り返す（whitespace-normal break-words） */}
           <button type="button" onClick={() => { setIsSignUp(!isSignUp); setErrorMsg(null); }} className="text-xs font-bold text-purple-500 hover:text-purple-600 underline transition whitespace-normal break-words leading-relaxed w-full">
             {isSignUp ? "すでにアカウントをお持ちの方はこちら" : "初めての方はこちら（新規登録）"}
           </button>
