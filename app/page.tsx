@@ -2,8 +2,11 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { toPng } from "html-to-image";
+// ★ 地図（Leaflet）のエラーを防ぐための「ダイナミックインポート」を追加！
+import dynamic from 'next/dynamic';
 
 import { CanvasSticker, CanvasText, CanvasDrawing, CanvasItem, PageData, CollectionPage, ExchangeDiary, CropShape, HistoryState } from "@/types";
+import { supabase } from "@/lib/supabase"; // ★ ログイン状態を復元するために追加
 import { saveMonthData, loadMonthData, saveAlbumSticker, loadAlbumStickersFromDB, deleteAlbumSticker, saveCollectionPage, loadCollectionPages, deleteCollectionPageDB, saveExchangeDiary, loadExchangeDiaries, deleteExchangeDiary, searchAllMonths, savePage, getPage, sendTradeRequest, getPendingTrades, respondToTrade } from "@/lib/db";
 import { InlineScratch, ScratchCard } from "@/components/common/Scratch";
 import { SearchModal } from "@/components/modals/SearchModal";
@@ -11,9 +14,11 @@ import { ImageCropModal } from "@/components/modals/ImageCropModal";
 import { NewExchangeModal } from "@/components/modals/NewExchangeModal";
 import { TradeRequestModal } from "@/components/modals/TradeRequestModal";
 import { AlbumModal } from "@/components/modals/AlbumModal";
-import { TravelMapModal } from "@/components/modals/TravelMapModal";
 import { AuthModal } from "@/components/modals/AuthModal";
 import { ProfileModal } from "@/components/modals/ProfileModal";
+
+// ★ SSRの罠を回避！TravelMapModalをクライアント側（画面がある場所）でのみ読み込む魔法
+const TravelMapModal = dynamic(() => import('@/components/modals/TravelMapModal').then(mod => mod.TravelMapModal), { ssr: false });
 
 const GRID_SIZE = 24;
 const getDateString = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -46,7 +51,7 @@ export default function StickerMaker() {
   const [isNewExchangeModalOpen, setIsNewExchangeModalOpen] = useState(false);
   const [isAlbumOpen, setIsAlbumOpen] = useState(false);
   const [albumStickers, setAlbumStickers] = useState<CanvasSticker[]>([]);
-const [tradeRequest, setTradeRequest] = useState<{offerStickerSrc: string, targetStickerId: string, partnerName: string, tradeId?: string, sticker?: any} | null>(null);
+  const [tradeRequest, setTradeRequest] = useState<{offerStickerSrc: string, targetStickerId: string, partnerName: string, tradeId?: string, sticker?: any} | null>(null);
 
   const [isTravelMapOpen, setIsTravelMapOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -86,6 +91,39 @@ const [tradeRequest, setTradeRequest] = useState<{offerStickerSrc: string, targe
 
   const snap = (value: number) => isGridMode ? Math.round(value / GRID_SIZE) * GRID_SIZE : value;
 
+  // ★ リロード時にログイン状態を復元する処理を追加
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user || null);
+    };
+    checkUser();
+
+    // ログイン状態が変わった時の監視もセット
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+    return () => { authListener.subscription.unsubscribe(); };
+  }, []);
+
+  // ★ ログアウト処理を追加（画面のデータもリセット）
+  const handleLogout = async () => {
+    if (confirm("ログアウトしますか？")) {
+      await supabase.auth.signOut();
+      setUser(null);
+      // 画面に残っているデータをカラッポにする！
+      setPages([]);
+      setAlbumStickers([]);
+      setCollectionPages([]);
+      setExchangeDiaries([]);
+      setViewMode("calendar");
+      // 新しい月として再読み込み（空のデータになります）
+      const mKey = getMonthKey(currentMonth);
+      setPages(await loadMonthData(mKey));
+      alert("ログアウトしました");
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -98,14 +136,12 @@ const [tradeRequest, setTradeRequest] = useState<{offerStickerSrc: string, targe
       setIsLoaded(true);
     };
     loadData();
-  }, [currentMonth]);
+  }, [currentMonth, user]); // ★ user（ログイン状態）が変わった時も再読み込みする
 
-useEffect(() => { 
+  useEffect(() => { 
     if (isLoaded) {
-      // 1. パソコン内には今まで通り全データを保存（オフラインでも動くようにする）
       saveMonthData(getMonthKey(currentMonth), pages).catch(e => console.error(e)); 
       
-      // 2. クラウド（Supabase）には、現在編集しているページだけを同期！
       if (user && viewMode === "editor") {
         const activePage = pages[currentPageIndex];
         if (activePage) {
@@ -146,7 +182,6 @@ useEffect(() => {
 
   const undo = () => { if (history.length === 0) return; const previousState = history[history.length - 1]; setPages(previousState.pages); setCurrentPageIndex(previousState.currentPageIndex); setHistory(prev => prev.slice(0, -1)); setSelectedIds([]); };
 
-  // 1つ上へ移動
   const moveUp = (id: string) => {
     if (!currentItems) return;
     const index = currentItems.findIndex(i => i.id === id);
@@ -171,7 +206,6 @@ useEffect(() => {
     updateCurrentItems(newItems);
   };
 
-  // 1つ下へ移動
   const moveDown = (id: string) => {
     if (!currentItems) return;
     const index = currentItems.findIndex(i => i.id === id);
@@ -203,7 +237,6 @@ useEffect(() => {
     setSelectedIds([]);
   };
 
-  // --- 各種ハンドラー ---
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -285,12 +318,11 @@ useEffect(() => {
       const dateObj = new Date(y, m, d); const displayDate = dateObj.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
       const newPage: PageData = { id: "p-" + Date.now(), dateId: targetDateId, items: [], diaryText: "", date: displayDate };
       const newPages = [...pages, newPage]; setPages(newPages); setCurrentPageIndex(newPages.length - 1);
-      existingIndex = newPages.length - 1; // 新しく作ったページの場所を記憶
+      existingIndex = newPages.length - 1; 
     }
     
     setViewMode("editor"); setIsPenMode(false); setIsEraserMode(false); setSelectedIds([]); setIsEditingText(false); setIsMultiSelectMode(false);
 
-    // ★ ログイン中なら、クラウドから最新のデータを取得して画面を上書きする！
     if (user) {
       const cloudData = await getPage(targetDateId);
       if (cloudData) {
@@ -375,15 +407,11 @@ useEffect(() => {
       return; 
     }
     
-    // 送るシールを選ぶ（今回は公開中のものから1つ）
     const targetSticker = published[Math.floor(Math.random() * published.length)];
-
-    // 誰に送るか入力させる（簡単なテスト用UI）
     const targetId = window.prompt("送りたい相手の検索ID（@不要）を入力してください\n例：test_kun");
     if (!targetId) return;
 
     try {
-      // 🚀 ここで裏側の送信機能（GPS削除）が動きます！
       const receiverName = await sendTradeRequest(targetId, targetSticker);
       alert(`大成功！🎉\n${receiverName}さんにシールを送信しました！\n（裏側でGPS情報は完全に削除されています！）`);
     } catch (err: any) {
@@ -395,7 +423,7 @@ useEffect(() => {
     try {
       const trades = await getPendingTrades();
       if (trades.length > 0) {
-        const t = trades[0]; // とりあえず最初の1件を表示
+        const t = trades[0];
         setTradeRequest({
           tradeId: t.id,
           offerStickerSrc: t.offered_sticker.src,
@@ -415,7 +443,6 @@ useEffect(() => {
     if (!tradeRequest) return;
     
     if (tradeRequest.tradeId && tradeRequest.sticker) {
-      // ☁️ クラウドからの本物のシールを受け取る場合
       await respondToTrade(tradeRequest.tradeId, true);
       const newSticker: CanvasSticker = { 
         ...tradeRequest.sticker, 
@@ -425,7 +452,6 @@ useEffect(() => {
       };
       await saveAlbumSticker(newSticker);
     } else {
-      // 💻 昔のモック（ダミー）の処理（念のため残す）
       const newSticker: CanvasSticker = { id: "s-" + Date.now(), type: "sticker", src: tradeRequest.offerStickerSrc, x: 100, y: 100, width: 200, height: 200, name: `${tradeRequest.partnerName}からの贈り物`, usageCount: 0, lastUsed: Date.now(), isFavorite: true, isPublished: false, decoration: "none", animation: "none", rotation: 0 };
       await saveAlbumSticker(newSticker); 
     }
@@ -437,7 +463,7 @@ useEffect(() => {
 
   const declineTrade = async () => {
     if (tradeRequest?.tradeId) {
-      await respondToTrade(tradeRequest.tradeId, false); // 拒否してデータベースを更新
+      await respondToTrade(tradeRequest.tradeId, false);
     }
     setTradeRequest(null);
   };
@@ -496,7 +522,6 @@ useEffect(() => {
         if (item.type === "sticker") { const ratio = item.height / item.width; const newWidth = Math.max(40, initialVal + (dx + dy) / 2); const snappedWidth = snap(newWidth); return { ...item, width: snappedWidth, height: snappedWidth * ratio }; }
         if (item.type === "text") return { ...item, fontSize: Math.max(12, initialVal + (dx + dy) / 4) };
       }
-      // ★ ここを「+ dy」から「- dy」に変更しました！
       if (activeOp === "rotate" && item.type !== "drawing") return { ...item, rotation: initialVal - dy };
       return item;
     }));
@@ -633,11 +658,9 @@ useEffect(() => {
                setShowPreviews(false); setIsEditingText(false);
              }}>
           
-          {/* ★大修正：シール選択時のすべてのメニューを合体させた「最強のメニュー」 */}
           {item.type === "sticker" && selectedId === item.id && (
             <div className="absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 flex flex-col gap-2 bg-white p-3 rounded-2xl shadow-2xl border border-gray-100 w-[280px] z-[100] cursor-default" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
               
-              {/* レイヤー移動・操作ボタンの列 */}
               <div className="flex justify-between items-center bg-gray-50 p-1.5 rounded-xl border border-gray-200">
                 <div className="flex gap-1">
                   <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); moveUp(item.id); }} className="w-9 h-9 flex items-center justify-center bg-white border border-gray-200 shadow-sm hover:bg-blue-50 hover:border-blue-300 rounded-lg text-lg transition" title="1つ手前(上)へ">⬆️</button>
@@ -649,19 +672,16 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* シールの名前と秘密設定 */}
               <div className="flex gap-2 items-center">
                 <input type="text" value={item.name || ""} onChange={(e) => updateCurrentItems(items.map(i => i.id === item.id ? { ...i, name: e.target.value } as CanvasItem : i))} placeholder="シールの名前" className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 outline-none text-xs text-gray-700 focus:border-pink-400 font-bold" />
                 <button onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateCurrentItems(items.map(i => i.id === item.id ? { ...i, isSecret: !(i as any).isSecret } as CanvasItem : i)); }} className={`w-9 h-9 flex items-center justify-center rounded-lg text-lg transition border ${item.isSecret ? "bg-purple-100 border-purple-300" : "bg-gray-50 border-gray-200 hover:bg-gray-100"}`} title="スクラッチ（秘密にする）">{item.isSecret ? '🔒' : '🔓'}</button>
               </div>
 
-              {/* デコレーション */}
               <div className="text-[10px] font-bold text-gray-500 mb-[-4px]">🎨 デコレーション</div>
               <div className="flex gap-1.5 overflow-x-auto pb-1 snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 {DECORATIONS.map(d => <button key={d.id} onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateCurrentItems(items.map(i => i.id === item.id ? { ...i, decoration: d.id } as CanvasItem : i)); }} className={`shrink-0 flex flex-col items-center justify-center p-1 w-12 h-12 rounded-lg border snap-start transition ${item.decoration === d.id || (!item.decoration && d.id === 'none') ? 'bg-pink-50 border-pink-400 text-pink-600' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}><span className="text-base leading-none">{d.icon}</span><span className="text-[8px] mt-1 font-bold whitespace-nowrap leading-none">{d.label}</span></button>)}
               </div>
 
-              {/* アニメーション */}
               <div className="text-[10px] font-bold text-gray-500 mt-1 mb-[-4px]">✨ 動き（アニメ）</div>
               <div className="flex gap-1.5 overflow-x-auto pb-1 snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 {ANIMATIONS.map(a => <button key={a.id} onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); updateCurrentItems(items.map(i => i.id === item.id ? { ...i, animation: a.id } as CanvasItem : i)); }} className={`shrink-0 flex flex-col items-center justify-center p-1 w-12 h-12 rounded-lg border snap-start transition ${item.animation === a.id || (!item.animation && a.id === 'none') ? 'bg-blue-50 border-blue-400 text-blue-600' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}><span className="text-base leading-none">{a.icon}</span><span className="text-[8px] mt-1 font-bold whitespace-nowrap leading-none">{a.label}</span></button>)}
@@ -671,7 +691,6 @@ useEffect(() => {
             </div>
           )}
 
-          {/* ★大修正：文字選択時のすべてのメニューを合体させた「最強のメニュー」 */}
           {item.type === "text" && selectedId === item.id && (
             <div className="absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 flex flex-col gap-2 bg-white p-3 rounded-2xl shadow-2xl border border-gray-100 min-w-[240px] z-[100] cursor-default" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
               
@@ -710,15 +729,12 @@ useEffect(() => {
             </div>
           )}
 
-          {/* ★ 修正：選択されている時だけ、リサイズと回転ボタンを表示する */}
           {selectedIds.includes(item.id) && (
             <>
-              {/* リサイズボタン（右下） */}
               <div className="absolute bottom-0 right-0 w-16 h-16 z-50 flex items-center justify-center translate-x-1/3 translate-y-1/3 cursor-nwse-resize group" onPointerDown={(e) => handleItemPointerDown(e, item.id, "resize")} onPointerUp={handleItemPointerUp}>
                 <div className={`w-8 h-8 bg-white border-2 ${item.type === 'sticker' ? 'border-blue-500' : 'border-emerald-500'} rounded-full shadow-lg flex items-center justify-center pointer-events-none`}>⤡</div>
               </div>
               
-              {/* 回転ボタン（左下に変更！） */}
               {(item.type === "text" || item.type === "sticker") && (
                 <div className="absolute bottom-0 left-0 w-16 h-16 z-50 flex items-center justify-center -translate-x-1/3 translate-y-1/3 cursor-pointer group" onPointerDown={(e) => handleItemPointerDown(e, item.id, "rotate")} onPointerUp={handleItemPointerUp}>
                   <div className="w-8 h-8 bg-white border-2 border-orange-500 rounded-full shadow-lg flex items-center justify-center pointer-events-none">🔄</div>
@@ -769,23 +785,25 @@ useEffect(() => {
       <TravelMapModal isOpen={isTravelMapOpen} onClose={() => setIsTravelMapOpen(false)} pages={pages} onJump={handleJumpToSearchResult} />
       <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} searchQuery={searchQuery} onSearchChange={handleSearchChange} isSearching={isSearching} searchResults={searchResults} onJump={handleJumpToSearchResult} />
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} onSuccess={(loggedInUser) => setUser(loggedInUser)} />
-        <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} user={user} />
+      <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} user={user} />
+      
       {/* 1. カレンダーモード */}
       {viewMode === "calendar" && (
         <div className="min-h-screen bg-pink-50 font-sans select-none overflow-hidden relative flex flex-col">
-         {/* ★ ログイン状態を表示するミニバーを追加 */}
-          <div className="w-full max-w-md mx-auto px-4 pt-2 flex justify-end gap-2">
+         {/* ★ ヘッダー（ログイン・ログアウトボタンを追加） */}
+          <div className="w-full max-w-md mx-auto px-4 pt-2 flex justify-end gap-2 items-center">
             {user ? (
               <>
                 <button onClick={checkMailbox} className="text-[10px] font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 px-3 py-1 rounded-full border border-amber-200 transition shadow-sm">
-                  📬 ポストを確認
+                  📬 ポスト
                 </button>
                 <button onClick={() => setIsProfileModalOpen(true)} className="text-[10px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-1 rounded-full border border-purple-200 transition">
-                  ⚙️ プロフィール設定
+                  ⚙️ 設定
                 </button>
-                <span className="text-[10px] font-bold text-gray-500 bg-white/60 px-3 py-1 rounded-full border border-gray-100">
-                  👤 {user.email}
-                </span>
+                {/* ★ ログアウトボタンを追加 */}
+                <button onClick={handleLogout} className="text-[10px] font-bold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-full border border-red-200 transition">
+                  🚪 ログアウト
+                </button>
               </>
             ) : (
               <button onClick={() => setIsAuthModalOpen(true)} className="text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-1 rounded-full border border-purple-200 transition">
