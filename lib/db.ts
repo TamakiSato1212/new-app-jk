@@ -29,7 +29,38 @@ export function initDB(): Promise<IDBDatabase> {
 }
 
 export function saveMonthData(monthKey: string, pages: PageData[]): Promise<void> { return initDB().then(db => new Promise((resolve, reject) => { const tx = db.transaction(STORE_NAME, "readwrite"); tx.objectStore(STORE_NAME).put(pages, monthKey); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); })); }
-export function loadMonthData(monthKey: string): Promise<PageData[]> { return initDB().then(db => new Promise((resolve, reject) => { const tx = db.transaction(STORE_NAME, "readonly"); const request = tx.objectStore(STORE_NAME).get(monthKey); request.onsuccess = () => resolve(request.result || []); request.onerror = () => reject(request.error); })); }
+export const loadMonthData = async (monthKey: string): Promise<PageData[]> => {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (user) {
+    // 1. ログイン中なら、クラウド（Supabase）からその月のページを全部取得！
+    // date_id が "YYYY-MM" で始まるものをすべて引っ張ります
+    const { data, error } = await supabase
+      .from('pages')
+      .select('*')
+      .eq('user_id', user.id)
+      .like('date_id', `${monthKey}%`);
+
+    if (!error && data) {
+      // データベースの形式をフロントエンドの PageData 形式に変換
+      return data.map(row => ({
+        id: row.id,
+        dateId: row.date_id,
+        date: row.date_text,
+        diaryText: row.diary_text || "",
+        items: row.items || []
+      }));
+    }
+  }
+
+  // 2. ログインしていない（または圏外）なら、今まで通りパソコンの中のデータを取得
+  return initDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const request = tx.objectStore(STORE_NAME).get(monthKey);
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  }));
+};
 // ==========================================
 // 📦☁️ アルバム機能（ローカル ＋ クラウドのハイブリッド同期）
 // ==========================================
