@@ -19,7 +19,8 @@ type Props = {
 
 export const TravelMapModal = ({ isOpen, onClose, pages, onJump }: Props) => {
   // ※ useMemoのブロックは削除しました
-
+console.log("Modalに届いたページデータ:", pages);
+  
   if (!isOpen) return null;
 
   return (
