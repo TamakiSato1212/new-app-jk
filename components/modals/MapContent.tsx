@@ -6,6 +6,7 @@ import L from "leaflet";
 import { PageData } from "@/types";
 
 export default function MapContent({ pages, onJump }: { pages: PageData[], onJump: (page: PageData) => void }) {
+console.log("MapContentが受け取ったpages:", pages);
   const locationGroups: Record<string, { lat: number, lng: number, src: string, usages: { page: PageData, name: string }[] }> = {};
 
   // 🚀 防御ポイント1：データが空っぽ（null）でもエラーで落ちないようにする
