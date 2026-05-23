@@ -254,14 +254,19 @@ export default function StickerMaker() {
   };
 
   const handleCropComplete = async (newStickerData: any, saveToAlbum: boolean) => {
-    // ... (中略) ...
+    if (!currentItems) return;
+    saveHistory();
     const newS: CanvasSticker = { 
       id: "s-" + Date.now(), type: "sticker", src: newStickerData.src, x: snap(40), y: snap(150), 
       width: snap(newStickerData.width), height: newStickerData.height, name: newStickerData.name,
       usageCount: 0, lastUsed: Date.now(), isFavorite: false, decoration: "none", animation: "none", rotation: 0, isSecret: false, isPublished: false, 
-      // 🚀 変更：GPSがない画像でも、仮で緯度経度（会津周辺）をセットして地図に表示させる！
       location: pendingLocation || { lat: 37.5274, lng: 139.9396 }
     };
+    if (saveToAlbum) { await saveAlbumSticker(newS); setAlbumStickers(await loadAlbumStickersFromDB()); }
+    updateCurrentItems([...currentItems, newS]); 
+    setSelectedIds([newS.id]);
+    setImageSrc(null); setPendingLocation(null);
+  };
 
   const handleApplySecretToText = () => {
     if (!selectedTextRange || currentText === undefined) return;
@@ -1056,5 +1061,4 @@ export default function StickerMaker() {
       )}
     </>
   );
-}
 }
