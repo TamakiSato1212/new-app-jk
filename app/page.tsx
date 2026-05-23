@@ -2,11 +2,10 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { toPng } from "html-to-image";
-// ★ 地図（Leaflet）のエラーを防ぐための「ダイナミックインポート」を追加！
 import dynamic from 'next/dynamic';
 
 import { CanvasSticker, CanvasText, CanvasDrawing, CanvasItem, PageData, CollectionPage, ExchangeDiary, CropShape, HistoryState } from "@/types";
-import { supabase } from "@/lib/supabase"; // ★ ログイン状態を復元するために追加
+import { supabase } from "@/lib/supabase";
 import { saveMonthData, loadMonthData, saveAlbumSticker, loadAlbumStickersFromDB, deleteAlbumSticker, saveCollectionPage, loadCollectionPages, deleteCollectionPageDB, saveExchangeDiary, loadExchangeDiaries, deleteExchangeDiary, searchAllMonths, savePage, getPage, sendTradeRequest, getPendingTrades, respondToTrade } from "@/lib/db";
 import { InlineScratch, ScratchCard } from "@/components/common/Scratch";
 import { SearchModal } from "@/components/modals/SearchModal";
@@ -17,7 +16,6 @@ import { AlbumModal } from "@/components/modals/AlbumModal";
 import { AuthModal } from "@/components/modals/AuthModal";
 import { ProfileModal } from "@/components/modals/ProfileModal";
 
-// ★ SSRの罠を回避！TravelMapModalをクライアント側（画面がある場所）でのみ読み込む魔法
 const TravelMapModal = dynamic(() => import('@/components/modals/TravelMapModal').then(mod => mod.TravelMapModal), { ssr: false });
 
 const GRID_SIZE = 24;
@@ -91,33 +89,50 @@ export default function StickerMaker() {
 
   const snap = (value: number) => isGridMode ? Math.round(value / GRID_SIZE) * GRID_SIZE : value;
 
-  // ★ リロード時にログイン状態を復元する処理を追加
+  const handleSaveDataImmediate = async () => {
+    if (!isLoaded) return;
+    try {
+      await saveMonthData(getMonthKey(currentMonth), pages);
+      if (user && viewMode === "editor") {
+        const activePage = pages[currentPageIndex];
+        if (activePage) await savePage(activePage.dateId, activePage.date, activePage.diaryText || "", activePage.items);
+      }
+      if (viewMode === "collection_editor" && currentCollectionId) {
+        const target = collectionPages.find(c => c.id === currentCollectionId);
+        if (target) await saveCollectionPage(target);
+      }
+      if (viewMode === "exchange_editor" && currentExchangeId) {
+        const target = exchangeDiaries.find(e => e.id === currentExchangeId);
+        if (target) await saveExchangeDiary(target);
+      }
+      alert("日記のデータをクラウドに保存しました！💾\nこれで地図にも最新のシールが反映されます。✨");
+    } catch (e) {
+      console.error("手動保存エラー:", e);
+      alert("データの保存中にエラーが発生しました。");
+    }
+  };
+
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user || null);
     };
     checkUser();
-
-    // ログイン状態が変わった時の監視もセット
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
     });
     return () => { authListener.subscription.unsubscribe(); };
   }, []);
 
-  // ★ ログアウト処理を追加（画面のデータもリセット）
   const handleLogout = async () => {
     if (confirm("ログアウトしますか？")) {
       await supabase.auth.signOut();
       setUser(null);
-      // 画面に残っているデータをカラッポにする！
       setPages([]);
       setAlbumStickers([]);
       setCollectionPages([]);
       setExchangeDiaries([]);
       setViewMode("calendar");
-      // 新しい月として再読み込み（空のデータになります）
       const mKey = getMonthKey(currentMonth);
       setPages(await loadMonthData(mKey));
       alert("ログアウトしました");
@@ -136,18 +151,14 @@ export default function StickerMaker() {
       setIsLoaded(true);
     };
     loadData();
-  }, [currentMonth, user]); // ★ user（ログイン状態）が変わった時も再読み込みする
+  }, [currentMonth, user]);
 
   useEffect(() => { 
     if (isLoaded) {
       saveMonthData(getMonthKey(currentMonth), pages).catch(e => console.error(e)); 
-      
       if (user && viewMode === "editor") {
         const activePage = pages[currentPageIndex];
-        if (activePage) {
-          savePage(activePage.dateId, activePage.date, activePage.diaryText || "", activePage.items)
-            .catch(e => console.error("クラウド保存エラー:", e));
-        }
+        if (activePage) savePage(activePage.dateId, activePage.date, activePage.diaryText || "", activePage.items).catch(e => console.error(e));
       }
     }
   }, [pages, isLoaded, currentMonth, user, viewMode, currentPageIndex]);
@@ -191,19 +202,10 @@ export default function StickerMaker() {
       if (currentItems[i].type !== "drawing") { nextIndex = i; break; }
     }
     if (nextIndex === -1) {
-      if (index !== currentItems.length - 1) {
-        saveHistory();
-        const newItems = [...currentItems];
-        const [target] = newItems.splice(index, 1);
-        newItems.push(target);
-        updateCurrentItems(newItems);
-      }
+      if (index !== currentItems.length - 1) { saveHistory(); const newItems = [...currentItems]; const [target] = newItems.splice(index, 1); newItems.push(target); updateCurrentItems(newItems); }
       return; 
     }
-    saveHistory();
-    const newItems = [...currentItems];
-    [newItems[index], newItems[nextIndex]] = [newItems[nextIndex], newItems[index]];
-    updateCurrentItems(newItems);
+    saveHistory(); const newItems = [...currentItems]; [newItems[index], newItems[nextIndex]] = [newItems[nextIndex], newItems[index]]; updateCurrentItems(newItems);
   };
 
   const moveDown = (id: string) => {
@@ -215,26 +217,15 @@ export default function StickerMaker() {
       if (currentItems[i].type !== "drawing") { prevIndex = i; break; }
     }
     if (prevIndex === -1) {
-      if (index !== 0) {
-        saveHistory();
-        const newItems = [...currentItems];
-        const [target] = newItems.splice(index, 1);
-        newItems.unshift(target);
-        updateCurrentItems(newItems);
-      }
+      if (index !== 0) { saveHistory(); const newItems = [...currentItems]; const [target] = newItems.splice(index, 1); newItems.unshift(target); updateCurrentItems(newItems); }
       return; 
     }
-    saveHistory();
-    const newItems = [...currentItems];
-    [newItems[index], newItems[prevIndex]] = [newItems[prevIndex], newItems[index]];
-    updateCurrentItems(newItems);
+    saveHistory(); const newItems = [...currentItems]; [newItems[index], newItems[prevIndex]] = [newItems[prevIndex], newItems[index]]; updateCurrentItems(newItems);
   };
 
   const deleteSelected = () => {
     if (!currentItems || selectedIds.length === 0) return;
-    saveHistory();
-    updateCurrentItems(currentItems.filter(i => !selectedIds.includes(i.id)));
-    setSelectedIds([]);
+    saveHistory(); updateCurrentItems(currentItems.filter(i => !selectedIds.includes(i.id))); setSelectedIds([]);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -791,7 +782,6 @@ export default function StickerMaker() {
       {/* 1. カレンダーモード */}
       {viewMode === "calendar" && (
         <div className="min-h-screen bg-pink-50 font-sans select-none overflow-hidden relative flex flex-col">
-         {/* ★ ヘッダー（ログイン・ログアウトボタンを追加） */}
           <div className="w-full max-w-md mx-auto px-4 pt-2 flex justify-end gap-2 items-center">
             {user ? (
               <>
@@ -801,7 +791,6 @@ export default function StickerMaker() {
                 <button onClick={() => setIsProfileModalOpen(true)} className="text-[10px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-1 rounded-full border border-purple-200 transition">
                   ⚙️ 設定
                 </button>
-                {/* ★ ログアウトボタンを追加 */}
                 <button onClick={handleLogout} className="text-[10px] font-bold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-full border border-red-200 transition">
                   🚪 ログアウト
                 </button>
@@ -908,6 +897,7 @@ export default function StickerMaker() {
                 <button onClick={() => { setIsPenMode(!isPenMode); setIsEraserMode(false); setSelectedIds([]); setIsEditingText(false); setIsMultiSelectMode(false); }} className={`px-3 py-1.5 rounded-full font-bold text-xs ${isPenMode ? "bg-red-500 text-white" : "bg-gray-100"}`}>🖊️</button>
                 <button onClick={() => { setIsEraserMode(!isEraserMode); setIsPenMode(false); setSelectedIds([]); setIsEditingText(false); setIsMultiSelectMode(false); }} className={`px-3 py-1.5 rounded-full font-bold text-xs ${isEraserMode ? "bg-indigo-500 text-white" : "bg-gray-100"}`}>🧹</button>
               </div>
+              <button onClick={handleSaveDataImmediate} className="bg-purple-600 text-white px-3 py-2 rounded-full shadow-md font-bold text-xs">💾 保存</button>
             </div>
           ) : (
             <div className="w-full max-w-md mb-4 bg-white/80 backdrop-blur-md rounded-2xl py-3 px-4 shadow-sm text-center border border-gray-200 flex items-center justify-center gap-2"><span className="font-bold text-gray-600 text-sm">⏳ {currentExchange.partnerName} さんが書いています...</span><span className="text-xs text-gray-400">（スクラッチは削れます）</span></div>
@@ -959,7 +949,9 @@ export default function StickerMaker() {
               <button onClick={() => { setIsPenMode(!isPenMode); setIsEraserMode(false); setSelectedIds([]); setIsEditingText(false); setIsMultiSelectMode(false); }} className={`px-3 py-1.5 rounded-full font-bold text-xs ${isPenMode ? "bg-red-500 text-white" : "bg-gray-100"}`}>🖊️ ペン</button>
               <button onClick={() => { setIsEraserMode(!isEraserMode); setIsPenMode(false); setSelectedIds([]); setIsEditingText(false); setIsMultiSelectMode(false); }} className={`px-3 py-1.5 rounded-full font-bold text-xs ${isEraserMode ? "bg-indigo-500 text-white" : "bg-gray-100"}`}>🧹 消しゴム</button>
             </div>
-            <button onClick={saveAsImage} className="bg-orange-500 text-white px-3 py-2 rounded-full shadow-md font-bold text-xs">💾 保存</button>
+            
+            <button onClick={handleSaveDataImmediate} className="bg-purple-600 text-white px-3 py-2 rounded-full shadow-md font-bold text-xs">💾 データを保存</button>
+            <button onClick={saveAsImage} className="bg-orange-500 text-white px-3 py-2 rounded-full shadow-md font-bold text-xs">📸 画像で保存</button>
           </div>
 
           <div ref={diaryRef} className={`w-full max-w-md relative rounded-3xl shadow-xl bg-[#faf8ef] border border-gray-200 transition-all ${(isPenMode || isEraserMode) ? "cursor-none ring-2 " + (isPenMode ? "ring-red-400" : "ring-indigo-400") : ""}`} style={{ height: "600px", touchAction: "none" }} onPointerDown={handleDiaryPointerDown} onPointerMove={handleCanvasPointerMove} onPointerUp={handleDiaryPointerUp} onPointerLeave={handleDiaryPointerLeave} onClick={e => { e.stopPropagation(); setShowPreviews(false); setSelectedIds([]); setIsEditingText(false); setIsMultiSelectMode(false); }}>
@@ -1023,7 +1015,7 @@ export default function StickerMaker() {
               <button onClick={() => { setIsPenMode(!isPenMode); setIsEraserMode(false); setSelectedIds([]); setIsEditingText(false); setIsMultiSelectMode(false); }} className={`px-3 py-1.5 rounded-full font-bold text-xs ${isPenMode ? "bg-red-500 text-white" : "bg-gray-100"}`}>🖊️</button>
               <button onClick={() => { setIsEraserMode(!isEraserMode); setIsPenMode(false); setSelectedIds([]); setIsEditingText(false); setIsMultiSelectMode(false); }} className={`px-3 py-1.5 rounded-full font-bold text-xs ${isEraserMode ? "bg-indigo-500 text-white" : "bg-gray-100"}`}>🧹</button>
             </div>
-            <button onClick={saveAsImage} className="bg-orange-500 text-white px-3 py-2 rounded-full shadow-md font-bold text-xs">💾 保存</button>
+            <button onClick={handleSaveDataImmediate} className="bg-purple-600 text-white px-3 py-2 rounded-full shadow-md font-bold text-xs">💾 保存</button>
           </div>
 
           <div ref={diaryRef} className={`w-full max-w-md relative rounded-3xl shadow-xl border border-gray-200 transition-all ${currentCollection.bgClass} ${(isPenMode || isEraserMode) ? "cursor-none ring-2 " + (isPenMode ? "ring-red-400" : "ring-indigo-400") : ""}`} style={{ height: "600px", touchAction: "none" }} onPointerDown={handleDiaryPointerDown} onPointerMove={handleCanvasPointerMove} onPointerUp={handleDiaryPointerUp} onPointerLeave={handleDiaryPointerLeave} onClick={e => { e.stopPropagation(); setSelectedIds([]); setIsEditingText(false); setIsMultiSelectMode(false); }}>
