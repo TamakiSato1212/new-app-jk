@@ -44,6 +44,11 @@ console.log("MapContentが受け取ったpages:", pages);
     // 🚀 防御ポイント4：地図が他の画面より前に出しゃばらないように z-index を 0 に固定
     <MapContainer center={center as [number, number]} zoom={6} style={{ height: "100%", width: "100%", borderRadius: "1rem", zIndex: 0 }}>
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+
+      <Marker position={[35.681236, 139.767125]}>
+    <Popup>テストピンです！</Popup>
+  </Marker>
+  
       {markers.map((group, idx) => {
         const icon = L.divIcon({
           className: "custom-icon",
